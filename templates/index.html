@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roammind AI - Multi-Agent Travel Planner</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            height: 85vh;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 20px;
+            background-color: #252526;
+            border-bottom: 1px solid #333;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            color: #4da6ff;
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #005fb8;
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            border-bottom-left-radius: 2px;
+            border: 1px solid #3c3c3c;
+        }
+
+        .loading {
+            align-self: flex-start;
+            font-style: italic;
+            color: #888;
+        }
+
+        .input-area {
+            display: flex;
+            padding: 15px;
+            background-color: #252526;
+            border-top: 1px solid #333;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #3c3c3c;
+            background-color: #1e1e1e;
+            color: #fff;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: #4da6ff;
+        }
+
+        button {
+            padding: 12px 24px;
+            background-color: #005fb8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #0078d4;
+        }
+
+        button:disabled {
+            background-color: #444;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🌍 Roammind AI Travel Planner</h1>
+    </header>
+
+    <div class="chat-box" id="chatBox">
+        <div class="message bot-message">
+            Hello! Where would you like to travel? Specify your destination, budget, or preferences, and I'll create a full flight, hotel, and daily itinerary for you!
+        </div>
+    </div>
+
+    <form class="input-area" id="travelForm">
+        <input type="text" id="userInput" placeholder="e.g., Plan a 5-day budget trip to Tokyo..." required autocomplete="off">
+        <button type="submit" id="sendBtn">Send</button>
+    </form>
+</div>
+
+<script>
+    let currentThreadId = null; // Stores thread_id across requests
+
+    const chatBox = document.getElementById('chatBox');
+    const travelForm = document.getElementById('travelForm');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    travelForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const message = userInput.value.trim();
+        if (!message) return;
+
+        // 1. Append User Message to UI
+        appendMessage(message, 'user-message');
+        userInput.value = '';
+        
+        // Disable input while processing
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+
+        // 2. Append Loading State
+        const loadingId = appendMessage('AI agents are researching flights, hotels, and itineraries...', 'loading');
+
+        try {
+            // 3. Call API Endpoint
+            const response = await fetch('/api/travel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    thread_id: currentThreadId
+                })
+            });
+
+            const data = await response.json();
+
+            // Remove loading indicator
+            document.getElementById(loadingId)?.remove();
+
+            if (data.success) {
+                // Save the thread_id for conversation persistence
+                currentThreadId = data.thread_id;
+
+                // 4. Append Bot Response
+                appendMessage(data.answer, 'bot-message');
+            } else {
+                appendMessage(`Error: ${data.error || 'Failed to process request.'}`, 'bot-message');
+            }
+
+        } catch (error) {
+            document.getElementById(loadingId)?.remove();
+            appendMessage('An error occurred while communicating with the server.', 'bot-message');
+            console.error('Error:', error);
+        } finally {
+            // Re-enable inputs
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+    });
+
+    function appendMessage(text, className) {
+        const msgDiv = document.createElement('div');
+        const uniqueId = 'msg-' + Date.now();
+        msgDiv.id = uniqueId;
+        msgDiv.classList.add('message', className);
+        msgDiv.textContent = text;
+        
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        
+        return uniqueId;
+    }
+</script>
+
+</body>
+</html>
